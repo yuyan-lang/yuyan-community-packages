@@ -27,16 +27,16 @@
 ```sh
 # 取工具链钉里的语言仓提交与原生工具链包（macOS 用 linux-x64 换成 macos-arm64 的包，网址在语言仓的 historical-binaries 发行里）
 git clone https://github.com/yuyan-lang/yuyan 语言仓
-git -C 语言仓 checkout "$(awk -F'\t' '$1=="语言仓提交"{print $2}' 工具链钉.tsv)"
-curl -L -o 工具链.tar.gz "$(awk -F'\t' '$1=="原生工具链网址"{print $2}' 工具链钉.tsv)"
+git -C 语言仓 checkout "$(sed -n 's/^「语言仓提交」者『\(.*\)』也。$/\1/p' 工具链钉。数据。豫)"
+curl -L -o 工具链.tar.gz "$(sed -n 's/^「原生工具链网址」者『\(.*\)』也。$/\1/p' 工具链钉。数据。豫)"
 tar -xzf 工具链.tar.gz -C 语言仓
 (cd 语言仓 && ./yy豫构_stable.exe 构建 社区包工具 --输出 yy社区包工具.exe -j 8)
 
 # 元数据检查（与拉取请求的检查相同）
-./语言仓/yy社区包工具.exe 检查 --社区 "$PWD" --语言仓 "$PWD/语言仓" --基 origin/main --头 HEAD --输出 包清单.tsv
+./语言仓/yy社区包工具.exe 检查 --社区 "$PWD" --语言仓 "$PWD/语言仓" --基 origin/main --头 HEAD --输出 包清单。数据。豫
 
 # 构建与测试
-./语言仓/yy社区包工具.exe 构建 --社区 "$PWD" --语言仓 "$PWD/语言仓" --包清单 包清单.tsv --树 构建树 --产物 产物 --目标 林纳克斯-兼容六十四 --测试
+./语言仓/yy社区包工具.exe 构建 --社区 "$PWD" --语言仓 "$PWD/语言仓" --包清单 包清单。数据。豫 --树 构建树 --产物 产物 --目标 林纳克斯-兼容六十四 --测试
 ```
 
 `语言仓/`、`构建树/`、`产物/` 已在 `.gitignore` 里。
