@@ -1,0 +1,10 @@
+# 构建与检查的临时目录（见 CONTRIBUTING.md）
+语言仓/
+构建树/
+产物/
+机器人/
+包清单.tsv
+工具链.tar.gz
+.yybuild/
+yy*
+*.exe

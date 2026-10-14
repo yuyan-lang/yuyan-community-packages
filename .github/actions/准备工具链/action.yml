@@ -1,0 +1,64 @@
+# 准备豫言工具链：按仓库根的 工具链钉.tsv 检出语言仓的同一提交到 语言仓/，下载并核对语言仓的原生工具链包（Linux x64）解到 语言仓/，
+# 再用包里的 yy豫构_stable.exe 构建社区包工具 语言仓/yy社区包工具.exe（按语言仓提交与工具链包缓存）。
+# 工具链钉每行“键<制表>值”：原生工具链网址、原生工具链沙256、语言仓提交。
+name: 准备豫言工具链
+description: 按工具链钉检出语言仓、解开原生工具链包、构建社区包工具
+outputs:
+  commit:
+    description: 工具链钉里的语言仓提交号
+    value: ${{ steps.pin.outputs.commit }}
+  sha:
+    description: 原生工具链包的沙256
+    value: ${{ steps.pin.outputs.sha }}
+runs:
+  using: composite
+  steps:
+    - name: 读工具链钉
+      id: pin
+      shell: bash
+      run: |
+        set -euo pipefail
+        url="$(awk -F'\t' '$1=="原生工具链网址"{print $2}' 工具链钉.tsv)"
+        sha="$(awk -F'\t' '$1=="原生工具链沙256"{print $2}' 工具链钉.tsv)"
+        commit="$(awk -F'\t' '$1=="语言仓提交"{print $2}' 工具链钉.tsv)"
+        if [ -z "$url" ] || [ -z "$sha" ] || [ -z "$commit" ]; then
+          echo "::error::工具链钉.tsv 缺少原生工具链网址、原生工具链沙256 或语言仓提交"
+          exit 1
+        fi
+        {
+          echo "url=$url"
+          echo "sha=$sha"
+          echo "commit=$commit"
+        } >> "$GITHUB_OUTPUT"
+
+    - name: 检出语言仓（工具链钉的提交）
+      uses: actions/checkout@v4
+      with:
+        repository: yuyan-lang/yuyan
+        ref: ${{ steps.pin.outputs.commit }}
+        path: 语言仓
+        fetch-depth: 1
+        persist-credentials: false
+
+    - name: 恢复社区包工具
+      id: tool
+      uses: actions/cache@v4
+      with:
+        path: 语言仓/yy社区包工具.exe
+        key: 社区包工具-${{ steps.pin.outputs.commit }}-${{ steps.pin.outputs.sha }}
+
+    - name: 下载原生工具链包并构建社区包工具
+      shell: bash
+      env:
+        YY_PIN_URL: ${{ steps.pin.outputs.url }}
+        YY_PIN_SHA256: ${{ steps.pin.outputs.sha }}
+      run: |
+        set -euo pipefail
+        archive="$RUNNER_TEMP/yuyan-native.tar.gz"
+        curl --fail --location --retry 3 --retry-all-errors --retry-delay 2 --output "$archive" "$YY_PIN_URL"
+        echo "$YY_PIN_SHA256  $archive" | sha256sum --check -
+        tar -xzf "$archive" -C 语言仓
+        if [ ! -x 语言仓/yy社区包工具.exe ]; then
+          (cd 语言仓 && ./yy豫构_stable.exe 构建 社区包工具 --输出 yy社区包工具.exe -j "$(nproc)")
+        fi
+        test -x 语言仓/yy社区包工具.exe

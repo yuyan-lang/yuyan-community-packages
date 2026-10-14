@@ -1,0 +1,125 @@
+# 构建发布：main 有新提交（维护者推送，或合入机器人合入后显式触发）时，在 GitHub 托管运行机上
+# 构建自上次成功构建以来改动的包及依赖它们的包（工具链钉改了就是全部）：库做类型检查，可执行包编五个目标的程序，
+# 再给每个包写源码与文档归档；“推送”作业用社区 CI 令牌（机密 YUYAN_CI_UPLOAD_TOKEN）推到 yuyan-lang.org：
+# 先传程序，再传归档，最后传各所有者的软件目录与汇总目录 软件目录/社区/<目标>.tsv。没有令牌时只演练（打印将要发送的请求）。
+# main 上不跑包里的测试（拉取请求检查已跑过）：构建作业里不运行包的代码，产物才不会被别的包改写。
+name: 构建发布
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      all:
+        description: 重新构建全部包
+        type: boolean
+        default: false
+      dry_run:
+        description: 只演练推送（打印将要发送的请求，不上传）
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: 构建发布
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: 构建
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: 准备工具链
+        id: prep
+        uses: ./.github/actions/准备工具链
+
+      - name: 找上次成功构建的提交
+        id: base
+        env:
+          GH_TOKEN: ${{ github.token }}
+          YY_ALL: ${{ inputs.all }}
+        run: |
+          set -euo pipefail
+          base="$(gh run list -R "$GITHUB_REPOSITORY" -w 构建发布.yml --branch main --status success --limit 1 --json headSha --jq '.[0].headSha // ""')"
+          if [ "$YY_ALL" = "true" ]; then base=""; fi
+          if [ -n "$base" ] && ! git cat-file -e "$base^{commit}" 2>/dev/null; then base=""; fi
+          echo "上次成功构建：${base:-（无，全部构建）}"
+          echo "base=$base" >> "$GITHUB_OUTPUT"
+
+      - name: 算要构建的包
+        env:
+          YY_BASE: ${{ steps.base.outputs.base }}
+        run: ./语言仓/yy社区包工具.exe 改动 --社区 "$GITHUB_WORKSPACE" --语言仓 "$GITHUB_WORKSPACE/语言仓" --基 "$YY_BASE" --头 HEAD --输出 包清单.tsv
+
+      - name: 恢复编译缓存
+        uses: actions/cache@v4
+        with:
+          path: 构建树/.yybuild
+          key: 构建树-${{ steps.prep.outputs.commit }}-${{ github.sha }}
+          restore-keys: |
+            构建树-${{ steps.prep.outputs.commit }}-
+
+      - name: 在容器里构建（内存 12 GiB、不联网）
+        run: |
+          set -euo pipefail
+          docker run --rm --network none --memory 12g --memory-swap 12g --pids-limit 8192 \
+            --user "$(id -u):$(id -g)" -e HOME=/tmp \
+            -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" -w "$GITHUB_WORKSPACE" ubuntu:24.04 \
+            ./语言仓/yy社区包工具.exe 构建 --社区 "$GITHUB_WORKSPACE" --语言仓 "$GITHUB_WORKSPACE/语言仓" \
+              --包清单 包清单.tsv --树 构建树 --产物 产物 --提交 "$GITHUB_SHA" --归档 -j "$(nproc)"
+          cat 产物/清单.tsv 2>/dev/null || true
+          cat 产物/归档清单.tsv 2>/dev/null || true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: 产物
+          path: |
+            产物/清单.tsv
+            产物/归档清单.tsv
+            产物/失败.txt
+            产物/程序/**/*
+            产物/归档/**/*.zip
+            !产物/程序/**/*.链接印
+            !产物/程序/**/*.摘要
+          retention-days: 30
+          if-no-files-found: error
+
+  push:
+    name: 推送
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: 准备工具链
+        uses: ./.github/actions/准备工具链
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: 产物
+          path: 产物
+
+      # main 以外的分支（维护者手动触发的演练）与选了 dry_run 时一律演练。
+      - name: 推送到 yuyan-lang.org（没有令牌时演练）
+        env:
+          YUYAN_CI_UPLOAD_TOKEN: ${{ secrets.YUYAN_CI_UPLOAD_TOKEN }}
+          YY_DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_REF" != refs/heads/main ] || [ "$YY_DRY_RUN" = true ]; then
+            ./语言仓/yy社区包工具.exe 推送 --产物 产物 --演练
+          else
+            ./语言仓/yy社区包工具.exe 推送 --产物 产物
+          fi

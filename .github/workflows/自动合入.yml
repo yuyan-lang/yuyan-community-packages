@@ -1,0 +1,94 @@
+# 合入机器人：拉取请求检查成功后运行，只看元数据，不检出也不运行拉取请求的代码。
+# 检出的是 main（可信），按 main 的工具链钉构建社区包工具，用 GitHub 接口取拉取请求、改动文件、检查那轮与作业，
+# 向 yuyan-lang.org 查作者的 GitHub 账号关联的所有者，交 yy社区包工具 合入核对 决定：
+# 可以合入（退出码 0）就用 GITHUB_TOKEN 合入并触发构建发布（GITHUB_TOKEN 合入产生的推送不会触发工作流，所以显式触发）；
+# 不能合入（退出码 10）就在拉取请求里评论原因。
+name: 自动合入
+
+on:
+  workflow_run:
+    workflows: [拉取请求检查]
+    types: [completed]
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+
+concurrency:
+  group: 自动合入
+  cancel-in-progress: false
+
+jobs:
+  merge:
+    name: 核对并合入
+    if: github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: 准备工具链
+        uses: ./.github/actions/准备工具链
+
+      - name: 找拉取请求并收集元数据
+        id: collect
+        env:
+          GH_TOKEN: ${{ github.token }}
+          YY_RUN_ID: ${{ github.event.workflow_run.id }}
+          YY_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          number="$(gh pr list -R "$GITHUB_REPOSITORY" --state open --limit 200 --json number,headRefOid \
+            --jq ".[] | select(.headRefOid == \"$YY_HEAD_SHA\") | .number" | head -n 1)"
+          echo "number=$number" >> "$GITHUB_OUTPUT"
+          if [ -z "$number" ]; then
+            echo "找不到头提交为 $YY_HEAD_SHA 的开着的拉取请求，不处理"
+            exit 0
+          fi
+          mkdir -p 机器人
+          gh api "repos/$GITHUB_REPOSITORY/pulls/$number" > 机器人/pr.json
+          gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/pulls/$number/files?per_page=100" > 机器人/files.json
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$YY_RUN_ID" > 机器人/run.json
+          gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/actions/runs/$YY_RUN_ID/jobs?per_page=100" > 机器人/jobs.json
+          login="$(jq -r '.user.login' 机器人/pr.json)"
+          case "$login" in
+            *[!A-Za-z0-9-]*|'') status=000 ;;
+            *) status="$(curl --silent --show-error --location --output 机器人/owner.json --write-out '%{http_code}' \
+                 "https://yuyan-lang.org/api/account/github/$login" || echo 000)" ;;
+          esac
+          echo "作者 $login，yuyan-lang.org 查询状态 $status"
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+
+      - name: 核对
+        id: decide
+        if: steps.collect.outputs.number != ''
+        env:
+          YY_STATUS: ${{ steps.collect.outputs.status }}
+        run: |
+          set +e
+          ./语言仓/yy社区包工具.exe 合入核对 --拉取请求 机器人/pr.json --文件 机器人/files.json --运行 机器人/run.json \
+            --作业 机器人/jobs.json --所有者应答 机器人/owner.json --所有者状态 "$YY_STATUS" --输出 机器人/理由.md
+          code=$?
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          [ "$code" = 0 ] || [ "$code" = 10 ]
+
+      - name: 合入并触发构建发布
+        if: steps.decide.outputs.code == '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          YY_NUMBER: ${{ steps.collect.outputs.number }}
+          YY_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          gh pr merge "$YY_NUMBER" -R "$GITHUB_REPOSITORY" --merge --match-head-commit "$YY_HEAD_SHA"
+          gh workflow run 构建发布.yml -R "$GITHUB_REPOSITORY" --ref main
+
+      - name: 说明为何不自动合入
+        if: steps.decide.outputs.code == '10'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          YY_NUMBER: ${{ steps.collect.outputs.number }}
+        run: gh pr comment "$YY_NUMBER" -R "$GITHUB_REPOSITORY" --body-file 机器人/理由.md

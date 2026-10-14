@@ -1,0 +1,70 @@
+# 关联账号：有人在 issue 或拉取请求里贴出豫言账户页生成的关联码（yygh_ 加 32 位十六进制）时，
+# 把“GitHub 用户名、数字编号与关联码”用社区 CI 令牌报给 yuyan-lang.org（POST /api/account/github/link），
+# 服务端核对关联码（须是同一个 GitHub 用户名生成的，24 小时有效、只能用一次）后记下关联；结果回复在原处，issue 随即关闭。
+# 用户名与编号取自 GitHub 的事件（发帖人），正文只取关联码；不检出代码，正文不进入命令行。
+name: 关联账号
+
+on:
+  issues:
+    types: [opened]
+  issue_comment:
+    types: [created]
+
+permissions:
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: 关联账号-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  link:
+    name: 关联豫言账户
+    if: >-
+      (github.event_name == 'issues' && (contains(github.event.issue.body, 'yygh_') || contains(github.event.issue.title, 'yygh_'))) ||
+      (github.event_name == 'issue_comment' && contains(github.event.comment.body, 'yygh_'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: 报告关联码
+        env:
+          GH_TOKEN: ${{ github.token }}
+          YUYAN_CI_UPLOAD_TOKEN: ${{ secrets.YUYAN_CI_UPLOAD_TOKEN }}
+          YY_EVENT: ${{ github.event_name }}
+          YY_NUMBER: ${{ github.event.issue.number }}
+          YY_TITLE: ${{ github.event.issue.title }}
+          YY_BODY: ${{ github.event_name == 'issue_comment' && github.event.comment.body || github.event.issue.body }}
+          YY_LOGIN: ${{ github.event_name == 'issue_comment' && github.event.comment.user.login || github.event.issue.user.login }}
+          YY_ID: ${{ github.event_name == 'issue_comment' && github.event.comment.user.id || github.event.issue.user.id }}
+        run: |
+          set -euo pipefail
+          code="$(printf '%s\n%s\n' "$YY_TITLE" "$YY_BODY" | grep -oE 'yygh_[0-9a-f]{32}' | head -n 1 || true)"
+          if [ -z "$code" ]; then
+            gh issue comment "$YY_NUMBER" -R "$GITHUB_REPOSITORY" --body "没有找到完整的关联码（\`yygh_\` 加 32 位小写十六进制）。请到豫言账户页 https://yuyan-lang.org/cloud/账户/ 重新生成后贴出。"
+            exit 0
+          fi
+          if [ -z "$YUYAN_CI_UPLOAD_TOKEN" ]; then
+            gh issue comment "$YY_NUMBER" -R "$GITHUB_REPOSITORY" --body "收到 @$YY_LOGIN 的关联码，但本仓库还没有配置社区 CI 令牌（演练）。令牌就位后请重新贴一次。"
+            exit 0
+          fi
+          payload="$(jq -n --arg github "$YY_LOGIN" --argjson id "$YY_ID" --arg code "$code" '{github: $github, githubId: $id, code: $code}')"
+          status="$(curl --silent --show-error --output 应答.json --write-out '%{http_code}' -X POST \
+            -H "Authorization: Bearer $YUYAN_CI_UPLOAD_TOKEN" -H 'Content-Type: application/json' \
+            --data "$payload" https://yuyan-lang.org/api/account/github/link || echo 000)"
+          if [ "$status" = 200 ]; then
+            owner="$(jq -r '.owner // ""' 应答.json)"
+            bound="$(jq -r '.ownerBound // false' 应答.json)"
+            if [ "$bound" = true ]; then
+              note="以后你的拉取请求只改 \`包/$owner/\` 下的包、检查通过时会自动合入。"
+            else
+              note="你的豫言账户还没有绑定所有者名称，请先在账户页绑定，包目录就是 \`包/<所有者名称>/\`。"
+            fi
+            gh issue comment "$YY_NUMBER" -R "$GITHUB_REPOSITORY" --body "已把 GitHub 账号 @$YY_LOGIN 关联到 yuyan-lang.org 的豫言账户（所有者名称：${owner:-未绑定}）。$note"
+            if [ "$YY_EVENT" = issues ]; then
+              gh issue close "$YY_NUMBER" -R "$GITHUB_REPOSITORY" || true
+            fi
+          else
+            reason="$(jq -r '.error // ""' 应答.json 2>/dev/null || true)"
+            gh issue comment "$YY_NUMBER" -R "$GITHUB_REPOSITORY" --body "关联没有成功（状态 $status${reason:+：$reason}）。关联码须由你在账户页填写的这个 GitHub 账号贴出，24 小时内有效、只能用一次；过期或用过了请重新生成。"
+          fi
