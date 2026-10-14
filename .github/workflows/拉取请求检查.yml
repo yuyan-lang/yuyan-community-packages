@@ -32,12 +32,12 @@ jobs:
 
       # 检出的是拉取请求与 main 的合并提交：HEAD^1 是 main，HEAD^1..HEAD 是拉取请求的改动与提交。
       - name: 检查路径、包布局、许可与 DCO
-        run: ./语言仓/yy社区包工具.exe 检查 --社区 "$GITHUB_WORKSPACE" --语言仓 "$GITHUB_WORKSPACE/语言仓" --基 HEAD^1 --头 HEAD --输出 包清单.tsv
+        run: ./语言仓/yy社区包工具.exe 检查 --社区 "$GITHUB_WORKSPACE" --语言仓 "$GITHUB_WORKSPACE/语言仓" --基 HEAD^1 --头 HEAD --输出 包清单。数据。豫
 
       - uses: actions/upload-artifact@v4
         with:
           name: 包清单
-          path: 包清单.tsv
+          path: 包清单。数据。豫
           retention-days: 3
           if-no-files-found: error
 
@@ -78,11 +78,11 @@ jobs:
             --user "$(id -u):$(id -g)" -e HOME=/tmp \
             -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" -w "$GITHUB_WORKSPACE" ubuntu:24.04 \
             ./语言仓/yy社区包工具.exe 构建 --社区 "$GITHUB_WORKSPACE" --语言仓 "$GITHUB_WORKSPACE/语言仓" \
-              --包清单 包清单.tsv --树 构建树 --产物 产物 --提交 "$YY_HEAD_SHA" \
+              --包清单 包清单。数据。豫 --树 构建树 --产物 产物 --提交 "$YY_HEAD_SHA" \
               --目标 豫言-兼容六十四,林纳克斯-兼容六十四 --测试 -j "$(nproc)"
 
       - name: 列出编成的程序
         if: always()
         run: |
-          cat 产物/清单.tsv 2>/dev/null || true
+          cat 产物/清单。数据。豫 2>/dev/null || true
           cat 产物/失败.txt 2>/dev/null || true

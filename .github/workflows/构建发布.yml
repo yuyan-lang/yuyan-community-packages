@@ -1,7 +1,7 @@
 # 构建发布：main 有新提交（维护者推送，或合入机器人合入后显式触发）时，在 GitHub 托管运行机上
 # 构建自上次成功构建以来改动的包及依赖它们的包（工具链钉改了就是全部）：库做类型检查，可执行包编五个目标的程序，
 # 再给每个包写源码与文档归档；“推送”作业用社区 CI 令牌（机密 YUYAN_CI_UPLOAD_TOKEN）推到 yuyan-lang.org：
-# 先传程序，再传归档，最后传各所有者的软件目录与汇总目录 软件目录/社区/<目标>.tsv。没有令牌时只演练（打印将要发送的请求）。
+# 先传程序，再传归档，最后传各所有者的软件目录与汇总目录 软件目录/社区/<目标>。数据。豫。没有令牌时只演练（打印将要发送的请求）。
 # main 上不跑包里的测试（拉取请求检查已跑过）：构建作业里不运行包的代码，产物才不会被别的包改写。
 name: 构建发布
 
@@ -58,7 +58,7 @@ jobs:
       - name: 算要构建的包
         env:
           YY_BASE: ${{ steps.base.outputs.base }}
-        run: ./语言仓/yy社区包工具.exe 改动 --社区 "$GITHUB_WORKSPACE" --语言仓 "$GITHUB_WORKSPACE/语言仓" --基 "$YY_BASE" --头 HEAD --输出 包清单.tsv
+        run: ./语言仓/yy社区包工具.exe 改动 --社区 "$GITHUB_WORKSPACE" --语言仓 "$GITHUB_WORKSPACE/语言仓" --基 "$YY_BASE" --头 HEAD --输出 包清单。数据。豫
 
       - name: 恢复编译缓存
         uses: actions/cache@v4
@@ -75,16 +75,16 @@ jobs:
             --user "$(id -u):$(id -g)" -e HOME=/tmp \
             -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" -w "$GITHUB_WORKSPACE" ubuntu:24.04 \
             ./语言仓/yy社区包工具.exe 构建 --社区 "$GITHUB_WORKSPACE" --语言仓 "$GITHUB_WORKSPACE/语言仓" \
-              --包清单 包清单.tsv --树 构建树 --产物 产物 --提交 "$GITHUB_SHA" --归档 -j "$(nproc)"
-          cat 产物/清单.tsv 2>/dev/null || true
-          cat 产物/归档清单.tsv 2>/dev/null || true
+              --包清单 包清单。数据。豫 --树 构建树 --产物 产物 --提交 "$GITHUB_SHA" --归档 -j "$(nproc)"
+          cat 产物/清单。数据。豫 2>/dev/null || true
+          cat 产物/归档清单。数据。豫 2>/dev/null || true
 
       - uses: actions/upload-artifact@v4
         with:
           name: 产物
           path: |
-            产物/清单.tsv
-            产物/归档清单.tsv
+            产物/清单。数据。豫
+            产物/归档清单。数据。豫
             产物/失败.txt
             产物/程序/**/*
             产物/归档/**/*.zip
