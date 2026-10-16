@@ -1,0 +1,110 @@
+# 系统光盘：工具链钉换了语言仓提交时，在 GitHub 托管运行机上造豫言操作系统的两架构启动光盘，挂到本仓库的连续发行 os-iso-continuous。
+# 触发：构建发布跑完之后（合入机器人合入语言仓的复制拉取请求后会显式触发构建发布；GITHUB_TOKEN 合入的推送本身不触发工作流），
+# 维护者直接推送改了工具链钉，或手动触发。发行说明里记着上次造光盘所用的语言仓提交，与钉里的相同就跳过（手动触发时照造）。
+# 做法：按钉检出语言仓、解开原生工具链包（准备工具链），用包里的稳定豫构直出一级原生豫构，再跑语言仓的仓库目标「启动光盘」
+# （连带原生自举与造盘工具；产物 yy启动光盘/豫言系统-兼容六十四.iso 与 豫言系统-臂六十四.iso，预置为空、带工具链）。
+# 资产名用 ASCII（GitHub 会改掉资产名里的非 ASCII 字符）：yuyan-os-x86_64.iso、yuyan-os-aarch64.iso 与 SHA256SUMS，每轮覆盖上一版。
+# 新一轮来时取消还在跑的旧轮，只发最新的。
+name: 系统光盘
+
+on:
+  workflow_run:
+    workflows: [构建发布]
+    types: [completed]
+  push:
+    branches: [main]
+    paths: ['工具链钉。数据。豫']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: 系统光盘
+  cancel-in-progress: true
+
+env:
+  YY_ISO_TAG: os-iso-continuous
+
+jobs:
+  iso:
+    name: 造光盘并发布
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
+
+      - name: 读工具链钉，与上次造光盘的提交比较
+        id: need
+        env:
+          GH_TOKEN: ${{ github.token }}
+          YY_EVENT: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          commit="$(sed -n 's/^「语言仓提交」者『\(.*\)』也。$/\1/p' 工具链钉。数据。豫)"
+          last="$(gh release view "$YY_ISO_TAG" -R "$GITHUB_REPOSITORY" --json body --jq .body 2>/dev/null | sed -n 's/.*语言仓提交：\([0-9a-f]\{40\}\).*/\1/p' | head -n 1 || true)"
+          echo "工具链钉的语言仓提交：$commit；上次造光盘：${last:-（无）}"
+          if [ "$YY_EVENT" != workflow_dispatch ] && [ "$commit" = "$last" ]; then
+            echo "build=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: 准备工具链
+        id: prep
+        if: steps.need.outputs.build == 'true'
+        uses: ./.github/actions/准备工具链
+
+      # 原生自举与两次造盘要十几 GB，先删掉运行机上用不到的大目录。
+      - name: 腾出磁盘空间
+        if: steps.need.outputs.build == 'true'
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL || true
+          df -h /
+
+      - name: 直出一级原生豫构
+        if: steps.need.outputs.build == 'true'
+        working-directory: 语言仓
+        run: ./yy豫构_stable.exe 构建 豫构 --输出 yy豫构.exe -j "$(nproc)" -- --目标 本机 --执行器 yy执行器。树码
+
+      - name: 造两架构启动光盘（仓库目标「启动光盘」）
+        if: steps.need.outputs.build == 'true'
+        working-directory: 语言仓
+        run: ./yy豫构.exe 目标 启动光盘 -j "$(nproc)"
+
+      - name: 命名资产，算 SHA-256
+        if: steps.need.outputs.build == 'true'
+        run: |
+          set -euo pipefail
+          mkdir -p 光盘
+          mv 语言仓/yy启动光盘/豫言系统-兼容六十四.iso 光盘/yuyan-os-x86_64.iso
+          mv 语言仓/yy启动光盘/豫言系统-臂六十四.iso 光盘/yuyan-os-aarch64.iso
+          (cd 光盘 && sha256sum yuyan-os-x86_64.iso yuyan-os-aarch64.iso > SHA256SUMS)
+          cat 光盘/SHA256SUMS
+          ls -l 光盘
+
+      - name: 发布到连续发行
+        if: steps.need.outputs.build == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          YY_COMMIT: ${{ steps.prep.outputs.commit }}
+        run: |
+          set -euo pipefail
+          notes="$(printf '%s\n' \
+            "豫言操作系统启动光盘（连续版），每次工具链钉换了语言仓提交就重造一次，覆盖上一版。" \
+            "" \
+            "- 语言仓提交：$YY_COMMIT（https://github.com/yuyan-lang/yuyan/commit/$YY_COMMIT）" \
+            "- 造法：语言仓仓库目标「启动光盘」（./yy豫构.exe 目标 启动光盘），预置为空、带工具链。" \
+            "- yuyan-os-x86_64.iso 是 AMD64，yuyan-os-aarch64.iso 是 ARM64；BIOS/UEFI 混合启动，光盘与 U 盘同用一份（整盘写进 U 盘即可启动）。" \
+            "- 校验和见 SHA256SUMS。")"
+          if gh release view "$YY_ISO_TAG" -R "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            gh release upload "$YY_ISO_TAG" -R "$GITHUB_REPOSITORY" --clobber 光盘/yuyan-os-x86_64.iso 光盘/yuyan-os-aarch64.iso 光盘/SHA256SUMS
+            gh release edit "$YY_ISO_TAG" -R "$GITHUB_REPOSITORY" --notes "$notes"
+          else
+            gh release create "$YY_ISO_TAG" -R "$GITHUB_REPOSITORY" --prerelease --target main \
+              --title "豫言操作系统启动光盘（连续版）" --notes "$notes" \
+              光盘/yuyan-os-x86_64.iso 光盘/yuyan-os-aarch64.iso 光盘/SHA256SUMS
+          fi
