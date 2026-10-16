@@ -58,25 +58,37 @@ jobs:
         if: steps.need.outputs.build == 'true'
         uses: ./.github/actions/准备工具链
 
+      # 工具链钉还指着没有仓库目标「启动光盘」的旧语言仓提交（2026-10-16 以前）时跳过。
+      - name: 查语言仓有没有「启动光盘」目标
+        id: target
+        if: steps.need.outputs.build == 'true'
+        run: |
+          if grep -q "于『启动光盘』" 语言仓/应用/豫构/仓库目标。豫; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::工具链钉的语言仓提交还没有仓库目标「启动光盘」，跳过"
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          fi
+
       # 原生自举与两次造盘要十几 GB，先删掉运行机上用不到的大目录。
       - name: 腾出磁盘空间
-        if: steps.need.outputs.build == 'true'
+        if: steps.target.outputs.ok == 'true'
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL || true
           df -h /
 
       - name: 直出一级原生豫构
-        if: steps.need.outputs.build == 'true'
+        if: steps.target.outputs.ok == 'true'
         working-directory: 语言仓
         run: ./yy豫构_stable.exe 构建 豫构 --输出 yy豫构.exe -j "$(nproc)" -- --目标 本机 --执行器 yy执行器。树码
 
       - name: 造两架构启动光盘（仓库目标「启动光盘」）
-        if: steps.need.outputs.build == 'true'
+        if: steps.target.outputs.ok == 'true'
         working-directory: 语言仓
         run: ./yy豫构.exe 目标 启动光盘 -j "$(nproc)"
 
       - name: 命名资产，算 SHA-256
-        if: steps.need.outputs.build == 'true'
+        if: steps.target.outputs.ok == 'true'
         run: |
           set -euo pipefail
           mkdir -p 光盘
@@ -87,7 +99,7 @@ jobs:
           ls -l 光盘
 
       - name: 发布到连续发行
-        if: steps.need.outputs.build == 'true'
+        if: steps.target.outputs.ok == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           YY_COMMIT: ${{ steps.prep.outputs.commit }}
