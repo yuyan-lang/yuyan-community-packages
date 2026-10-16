@@ -67,6 +67,8 @@
 
 豫言操作系统的启动光盘也由本仓库的 CI 发布（工作流「系统光盘」）：工具链钉换了语言仓提交时，按钉的提交跑语言仓的仓库目标「启动光盘」，造两架构的光盘，挂到本仓库的连续发行 [os-iso-continuous](https://github.com/yuyan-lang/yuyan-community-packages/releases/tag/os-iso-continuous)：`yuyan-os-x86_64.iso`（AMD64）、`yuyan-os-aarch64.iso`（ARM64）与 `SHA256SUMS`，每轮覆盖上一版，发行说明写着所用的语言仓提交。光盘与 U 盘同用一份，预置为空、带工具链。
 
+官网下载中心的编译器包与桌面包同样由本仓库的 CI 编（工作流「下载产品」，语言仓的仓库目标「下载产品」），挂到连续发行 [downloads-continuous](https://github.com/yuyan-lang/yuyan-community-packages/releases/tag/downloads-continuous)：`yuyan-compiler-<系统>-<架构>.tar.gz`（系统 `yuyan-os`、`macos`、`linux`、`windows`）、`yuyan-desktop-<系统>-<架构>.tar.gz`（`macos`、`linux`、`windows`），架构 `x86_64`、`aarch64`，另有 `SHA256SUMS`。yuyan-lang.org 的下载中心只链这两个发行里的文件。
+
 ## 许可
 
 - 社区包只收这些许可（包描述「许可」字段写 SPDX 标识，可用 `AND`、`OR` 组合）：`Apache-2.0`、`MIT`、`BSD-2-Clause`、`BSD-3-Clause`、`ISC`、`Zlib`、`0BSD`、`AGPL-3.0-only`、`AGPL-3.0-or-later`。GPL 等其他传染性许可不收。包目录里请放许可证全文。
