@@ -3,7 +3,7 @@
 # 触发与跳过同「系统光盘」：构建发布跑完、维护者推送改了工具链钉或手动触发；发行说明里的语言仓提交与钉相同就跳过（手动触发照造），
 # 钉的提交还没有仓库目标「下载产品」也跳过。做法：准备工具链，直出一级原生豫构，跑语言仓的仓库目标「下载产品」（连带原生自举）。
 # 资产名用 ASCII（GitHub 会改掉非 ASCII 字符）：yuyan-compiler-<系统>-<架构>.tar.gz 与 yuyan-desktop-<系统>-<架构>.tar.gz，
-# 系统写 yuyan-os（豫言）、macos（苹果）、linux（林纳克斯）、windows（视窗），架构写 x86_64（兼容六十四）、aarch64（臂六十四）；另有 SHA256SUMS。
+# 系统写 yuyan-os（豫言）、macos（林檎）、linux（林纳）、windows（轩窗），架构写 x86_64（兼容六十四）、aarch64（臂六十四）；另有 SHA256SUMS。
 # 每轮覆盖上一版；新一轮来时取消还在跑的旧轮，只发最新的。
 name: 下载产品
 
@@ -91,7 +91,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p 产品
-          sys() { case "$1" in 豫言) echo yuyan-os;; 苹果) echo macos;; 林纳克斯) echo linux;; 视窗) echo windows;; *) echo "::error::未知系统 $1" >&2; exit 1;; esac; }
+          sys() { case "$1" in 豫言) echo yuyan-os;; 林檎) echo macos;; 林纳) echo linux;; 轩窗) echo windows;; *) echo "::error::未知系统 $1" >&2; exit 1;; esac; }
           arch() { case "$1" in 兼容六十四) echo x86_64;; 臂六十四) echo aarch64;; *) echo "::error::未知架构 $1" >&2; exit 1;; esac; }
           for f in 语言仓/下载产品/*.tar.gz; do
             b="$(basename "$f" .tar.gz)"
