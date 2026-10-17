@@ -2,7 +2,7 @@
 # 触发：构建发布跑完之后（合入机器人合入语言仓的复制拉取请求后会显式触发构建发布；GITHUB_TOKEN 合入的推送本身不触发工作流），
 # 维护者直接推送改了工具链钉，或手动触发。发行说明里记着上次造光盘所用的语言仓提交，与钉里的相同就跳过（手动触发时照造）。
 # 做法：按钉检出语言仓、解开原生工具链包（准备工具链），用包里的稳定豫构直出一级原生豫构，再跑语言仓的仓库目标「启动光盘」
-# （连带原生自举与造盘工具；产物 yy启动光盘/豫言系统-兼容六十四.iso 与 豫言系统-臂六十四.iso，预置为空、带工具链）。
+# （连带原生自举与造盘工具；产物 启动光盘/豫言系统-兼容六十四.iso 与 豫言系统-臂六十四.iso，预置为空、带工具链）。
 # 资产名用 ASCII（GitHub 会改掉资产名里的非 ASCII 字符）：yuyan-os-x86_64.iso、yuyan-os-aarch64.iso 与 SHA256SUMS，每轮覆盖上一版。
 # 新一轮来时取消还在跑的旧轮，只发最新的。
 name: 系统光盘
@@ -80,20 +80,20 @@ jobs:
       - name: 直出一级原生豫构
         if: steps.target.outputs.ok == 'true'
         working-directory: 语言仓
-        run: ./yy豫构_stable.exe 构建 豫构 --输出 yy豫构.exe -j "$(nproc)" -- --目标 本机 --执行器 yy执行器。树码
+        run: ./豫构稳定。林纳。豫行 构建 豫构 --输出 豫构。林纳。豫行 -j "$(nproc)" -- --目标 本机 --执行器 执行器。树码
 
       - name: 造两架构启动光盘（仓库目标「启动光盘」）
         if: steps.target.outputs.ok == 'true'
         working-directory: 语言仓
-        run: ./yy豫构.exe 目标 启动光盘 -j "$(nproc)"
+        run: ./豫构。林纳。豫行 目标 启动光盘 -j "$(nproc)"
 
       - name: 命名资产，算 SHA-256
         if: steps.target.outputs.ok == 'true'
         run: |
           set -euo pipefail
           mkdir -p 光盘
-          mv 语言仓/yy启动光盘/豫言系统-兼容六十四.iso 光盘/yuyan-os-x86_64.iso
-          mv 语言仓/yy启动光盘/豫言系统-臂六十四.iso 光盘/yuyan-os-aarch64.iso
+          mv 语言仓/启动光盘/豫言系统-兼容六十四.iso 光盘/yuyan-os-x86_64.iso
+          mv 语言仓/启动光盘/豫言系统-臂六十四.iso 光盘/yuyan-os-aarch64.iso
           (cd 光盘 && sha256sum yuyan-os-x86_64.iso yuyan-os-aarch64.iso > SHA256SUMS)
           cat 光盘/SHA256SUMS
           ls -l 光盘
@@ -109,7 +109,7 @@ jobs:
             "豫言操作系统启动光盘（连续版），每次工具链钉换了语言仓提交就重造一次，覆盖上一版。" \
             "" \
             "- 语言仓提交：$YY_COMMIT（https://github.com/yuyan-lang/yuyan/commit/$YY_COMMIT）" \
-            "- 造法：语言仓仓库目标「启动光盘」（./yy豫构.exe 目标 启动光盘），预置为空、带工具链。" \
+            "- 造法：语言仓仓库目标「启动光盘」（./豫构。林纳。豫行 目标 启动光盘），预置为空、带工具链。" \
             "- yuyan-os-x86_64.iso 是 AMD64，yuyan-os-aarch64.iso 是 ARM64；BIOS/UEFI 混合启动，光盘与 U 盘同用一份（整盘写进 U 盘即可启动）。" \
             "- 校验和见 SHA256SUMS。")"
           if gh release view "$YY_ISO_TAG" -R "$GITHUB_REPOSITORY" > /dev/null 2>&1; then

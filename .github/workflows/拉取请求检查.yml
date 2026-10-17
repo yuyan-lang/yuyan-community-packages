@@ -1,5 +1,5 @@
 # 拉取请求检查：只在 GitHub 托管运行机上跑，不带任何机密，令牌只读。
-# “元数据检查”只读不跑包里的代码：路径、包布局、许可白名单、DCO（yy社区包工具 检查）。
+# “元数据检查”只读不跑包里的代码：路径、包布局、许可白名单、DCO（社区包工具 检查）。
 # “构建与测试”在容器里跑（内存 12 GiB、不联网、进程数有上限），把改动的包及依赖它们的包连同依赖闭包复制进独立构建树：
 # 库做类型检查，可执行包编豫言系统 AMD64 豫行与 Linux x64 程序，运行包里的测试（每个至多十分钟）。
 # 合入机器人（自动合入.yml）在这两个作业都成功后核对作者与改动目录。
@@ -32,7 +32,7 @@ jobs:
 
       # 检出的是拉取请求与 main 的合并提交：HEAD^1 是 main，HEAD^1..HEAD 是拉取请求的改动与提交。
       - name: 检查路径、包布局、许可与 DCO
-        run: ./语言仓/yy社区包工具.exe 检查 --社区 "$GITHUB_WORKSPACE" --语言仓 "$GITHUB_WORKSPACE/语言仓" --基 HEAD^1 --头 HEAD --输出 包清单。数据。豫
+        run: ./语言仓/社区包工具。林纳。豫行 检查 --社区 "$GITHUB_WORKSPACE" --语言仓 "$GITHUB_WORKSPACE/语言仓" --基 HEAD^1 --头 HEAD --输出 包清单。数据。豫
 
       - uses: actions/upload-artifact@v4
         with:
@@ -64,7 +64,7 @@ jobs:
       - name: 恢复编译缓存
         uses: actions/cache/restore@v4
         with:
-          path: 构建树/.yybuild
+          path: 构建树/.豫构缓存
           key: 构建树-${{ steps.prep.outputs.commit }}-${{ github.sha }}
           restore-keys: |
             构建树-${{ steps.prep.outputs.commit }}-
@@ -77,7 +77,7 @@ jobs:
           docker run --rm --network none --memory 12g --memory-swap 12g --pids-limit 8192 \
             --user "$(id -u):$(id -g)" -e HOME=/tmp \
             -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" -w "$GITHUB_WORKSPACE" ubuntu:24.04 \
-            ./语言仓/yy社区包工具.exe 构建 --社区 "$GITHUB_WORKSPACE" --语言仓 "$GITHUB_WORKSPACE/语言仓" \
+            ./语言仓/社区包工具。林纳。豫行 构建 --社区 "$GITHUB_WORKSPACE" --语言仓 "$GITHUB_WORKSPACE/语言仓" \
               --包清单 包清单。数据。豫 --树 构建树 --产物 产物 --提交 "$YY_HEAD_SHA" \
               --目标 豫言-兼容六十四,林纳克斯-兼容六十四 --测试 -j "$(nproc)"
 
