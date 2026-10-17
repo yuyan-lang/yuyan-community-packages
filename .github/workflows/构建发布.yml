@@ -58,12 +58,12 @@ jobs:
       - name: 算要构建的包
         env:
           YY_BASE: ${{ steps.base.outputs.base }}
-        run: ./语言仓/yy社区包工具.exe 改动 --社区 "$GITHUB_WORKSPACE" --语言仓 "$GITHUB_WORKSPACE/语言仓" --基 "$YY_BASE" --头 HEAD --输出 包清单。数据。豫
+        run: ./语言仓/社区包工具。林纳。豫行 改动 --社区 "$GITHUB_WORKSPACE" --语言仓 "$GITHUB_WORKSPACE/语言仓" --基 "$YY_BASE" --头 HEAD --输出 包清单。数据。豫
 
       - name: 恢复编译缓存
         uses: actions/cache@v4
         with:
-          path: 构建树/.yybuild
+          path: 构建树/.豫构缓存
           key: 构建树-${{ steps.prep.outputs.commit }}-${{ github.sha }}
           restore-keys: |
             构建树-${{ steps.prep.outputs.commit }}-
@@ -74,7 +74,7 @@ jobs:
           docker run --rm --network none --memory 12g --memory-swap 12g --pids-limit 8192 \
             --user "$(id -u):$(id -g)" -e HOME=/tmp \
             -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" -w "$GITHUB_WORKSPACE" ubuntu:24.04 \
-            ./语言仓/yy社区包工具.exe 构建 --社区 "$GITHUB_WORKSPACE" --语言仓 "$GITHUB_WORKSPACE/语言仓" \
+            ./语言仓/社区包工具。林纳。豫行 构建 --社区 "$GITHUB_WORKSPACE" --语言仓 "$GITHUB_WORKSPACE/语言仓" \
               --包清单 包清单。数据。豫 --树 构建树 --产物 产物 --提交 "$GITHUB_SHA" --归档 -j "$(nproc)"
           cat 产物/清单。数据。豫 2>/dev/null || true
           cat 产物/归档清单。数据。豫 2>/dev/null || true
@@ -119,7 +119,7 @@ jobs:
         run: |
           set -euo pipefail
           if [ "$GITHUB_REF" != refs/heads/main ] || [ "$YY_DRY_RUN" = true ]; then
-            ./语言仓/yy社区包工具.exe 推送 --产物 产物 --演练
+            ./语言仓/社区包工具。林纳。豫行 推送 --产物 产物 --演练
           else
-            ./语言仓/yy社区包工具.exe 推送 --产物 产物
+            ./语言仓/社区包工具。林纳。豫行 推送 --产物 产物
           fi

@@ -1,5 +1,5 @@
 # 准备豫言工具链：按仓库根的 工具链钉。数据。豫 检出语言仓的同一提交到 语言仓/，下载并核对语言仓的原生工具链包（Linux x64）解到 语言仓/，
-# 再用包里的 yy豫构_stable.exe 构建社区包工具 语言仓/yy社区包工具.exe（按语言仓提交与工具链包缓存）。
+# 再用包里的 豫构稳定。林纳。豫行 构建社区包工具 语言仓/社区包工具。林纳。豫行（按语言仓提交与工具链包缓存）。
 # 工具链钉是数据子语言（语言仓提案 00028）：三个顶层字符串各占一行 「名」者『值』也。——原生工具链网址、原生工具链沙二五六、语言仓提交。
 name: 准备豫言工具链
 description: 按工具链钉检出语言仓、解开原生工具链包、构建社区包工具
@@ -44,7 +44,7 @@ runs:
       id: tool
       uses: actions/cache@v4
       with:
-        path: 语言仓/yy社区包工具.exe
+        path: 语言仓/社区包工具。林纳。豫行
         key: 社区包工具-${{ steps.pin.outputs.commit }}-${{ steps.pin.outputs.sha }}
 
     - name: 下载原生工具链包并构建社区包工具
@@ -58,7 +58,7 @@ runs:
         curl --fail --location --retry 3 --retry-all-errors --retry-delay 2 --output "$archive" "$YY_PIN_URL"
         echo "$YY_PIN_SHA256  $archive" | sha256sum --check -
         tar -xzf "$archive" -C 语言仓
-        if [ ! -x 语言仓/yy社区包工具.exe ]; then
-          (cd 语言仓 && ./yy豫构_stable.exe 构建 社区包工具 --输出 yy社区包工具.exe -j "$(nproc)")
+        if [ ! -x 语言仓/社区包工具。林纳。豫行 ]; then
+          (cd 语言仓 && ./豫构稳定。林纳。豫行 构建 社区包工具 --输出 社区包工具。林纳。豫行 -j "$(nproc)")
         fi
-        test -x 语言仓/yy社区包工具.exe
+        test -x 语言仓/社区包工具。林纳。豫行

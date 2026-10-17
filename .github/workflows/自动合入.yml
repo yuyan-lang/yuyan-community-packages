@@ -1,6 +1,6 @@
 # 合入机器人：拉取请求检查成功后运行，只看元数据，不检出也不运行拉取请求的代码。
 # 检出的是 main（可信），按 main 的工具链钉构建社区包工具，用 GitHub 接口取拉取请求、改动文件、检查那轮与作业，
-# 向 yuyan-lang.org 查作者的 GitHub 账号关联的所有者，交 yy社区包工具 合入核对 决定：
+# 向 yuyan-lang.org 查作者的 GitHub 账号关联的所有者，交 社区包工具 合入核对 决定：
 # 可以合入（退出码 0）就用 GITHUB_TOKEN 合入并触发构建发布（GITHUB_TOKEN 合入产生的推送不会触发工作流，所以显式触发）；
 # 不能合入（退出码 10）就在拉取请求里评论原因。
 name: 自动合入
@@ -69,7 +69,7 @@ jobs:
           YY_STATUS: ${{ steps.collect.outputs.status }}
         run: |
           set +e
-          ./语言仓/yy社区包工具.exe 合入核对 --拉取请求 机器人/pr.json --文件 机器人/files.json --运行 机器人/run.json \
+          ./语言仓/社区包工具。林纳。豫行 合入核对 --拉取请求 机器人/pr.json --文件 机器人/files.json --运行 机器人/run.json \
             --作业 机器人/jobs.json --所有者应答 机器人/owner.json --所有者状态 "$YY_STATUS" --输出 机器人/理由.md
           code=$?
           echo "code=$code" >> "$GITHUB_OUTPUT"
