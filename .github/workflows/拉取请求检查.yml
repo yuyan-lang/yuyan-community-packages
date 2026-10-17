@@ -79,7 +79,7 @@ jobs:
             -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" -w "$GITHUB_WORKSPACE" ubuntu:24.04 \
             ./语言仓/社区包工具。林纳。豫行 构建 --社区 "$GITHUB_WORKSPACE" --语言仓 "$GITHUB_WORKSPACE/语言仓" \
               --包清单 包清单。数据。豫 --树 构建树 --产物 产物 --提交 "$YY_HEAD_SHA" \
-              --目标 豫言-兼容六十四,林纳克斯-兼容六十四 --测试 -j "$(nproc)"
+              --目标 豫言-兼容六十四,林纳-兼容六十四 --测试 -j "$(nproc)"
 
       - name: 列出编成的程序
         if: always()
