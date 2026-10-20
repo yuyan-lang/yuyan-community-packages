@@ -71,8 +71,9 @@ jobs:
       - name: 在容器里构建（内存 12 GiB、不联网）
         run: |
           set -euo pipefail
+          # 传入 CI：容器里没有它时豫构会去起构建服务「将作」，在不联网的容器里卡住（语言仓议题 #176）。
           docker run --rm --network none --memory 12g --memory-swap 12g --pids-limit 8192 \
-            --user "$(id -u):$(id -g)" -e HOME=/tmp \
+            --user "$(id -u):$(id -g)" -e HOME=/tmp -e CI \
             -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" -w "$GITHUB_WORKSPACE" ubuntu:24.04 \
             ./语言仓/社区包工具。林纳。豫行 构建 --社区 "$GITHUB_WORKSPACE" --语言仓 "$GITHUB_WORKSPACE/语言仓" \
               --包清单 包清单。数据。豫 --树 构建树 --产物 产物 --提交 "$GITHUB_SHA" --归档 -j "$(nproc)"
