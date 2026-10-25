@@ -1,0 +1,127 @@
+# 文档站：工具链钉换了语言仓提交时，在 GitHub 托管运行机上出 docs.yuyan-lang.org（官网 yuyan-lang.org 的无脚本静态版，两站同一批页面），
+# 上传到 Cloudflare Pages 项目 yuyan-docs。官网的源码在语言仓 应用/书院/门庭/（门庭即官网），全部公开，这里只用公开源码构建。
+# 触发与跳过同「下载产品」：构建发布跑完、维护者推送改了工具链钉或本文件、手动触发；钉的语言仓提交已经发布过就跳过（手动触发照发），
+# 钉的提交还没有仓库目标「文档站」也跳过。做法：准备工具链，用包里的豫构跑语言仓的仓库目标「文档站」（写出 语言仓/dist/文档站），
+# 再 wrangler pages deploy。机密：CLOUDFLARE_API_TOKEN（只授 yuyan-docs 所在账户的 Cloudflare Pages 编辑权限），
+# CLOUDFLARE_ACCOUNT_ID（令牌只能看到一个账户时可省）；没有令牌时只演练：照样出站，存为构件「文档站」，不上传。
+name: 文档站
+
+on:
+  workflow_run:
+    workflows: [构建发布]
+    types: [completed]
+  push:
+    branches: [main]
+    paths: ['工具链钉。数据。豫', '.github/workflows/文档站.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: 文档站
+  cancel-in-progress: true
+
+jobs:
+  docs:
+    name: 出 docs 站并上传
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
+
+      - name: 读工具链钉
+        id: pin
+        run: |
+          set -euo pipefail
+          commit="$(sed -n 's/^「语言仓提交」者『\(.*\)』也。$/\1/p' 工具链钉。数据。豫)"
+          test -n "$commit"
+          echo "工具链钉的语言仓提交：$commit"
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+
+      # 发布成功后存一条以语言仓提交为键的空缓存作记号；记号在就是这个提交已经发布过。
+      - name: 查这个语言仓提交发布过没有
+        id: done
+        if: github.event_name != 'workflow_dispatch'
+        uses: actions/cache/restore@v4
+        with:
+          path: 文档站记号
+          key: 文档站已发-${{ steps.pin.outputs.commit }}
+          lookup-only: true
+
+      - name: 准备工具链
+        if: steps.done.outputs.cache-hit != 'true'
+        uses: ./.github/actions/准备工具链
+
+      # 工具链钉还指着没有仓库目标「文档站」的旧语言仓提交（2026-10-25 以前）时跳过。
+      - name: 查语言仓有没有「文档站」目标
+        id: target
+        if: steps.done.outputs.cache-hit != 'true'
+        run: |
+          if grep -q "于『文档站』" 语言仓/应用/豫构/仓库目标。豫; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::工具链钉的语言仓提交还没有仓库目标「文档站」，跳过"
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # 静态渲染程序（网页沙盘里跑真实的页面应用）编成网页汇编，在诺驿上运行，与语言仓 CI 用同一版诺驿。
+      - uses: actions/setup-node@v4
+        if: steps.target.outputs.ok == 'true'
+        with:
+          node-version: 26
+
+      - name: 出 docs 站（仓库目标「文档站」）
+        if: steps.target.outputs.ok == 'true'
+        working-directory: 语言仓
+        run: |
+          set -euo pipefail
+          ./豫构稳定。林纳。豫行 目标 文档站 -j "$(nproc)"
+          test -s dist/文档站/index.html
+          echo "文件数：$(find dist/文档站 -type f | wc -l)"
+          bad="$(grep -rlI --include='*.html' '<script' dist/文档站 || true)"
+          if [ -n "$bad" ]; then
+            echo "$bad" | head -n 5
+            echo "::error::docs 站里不许有脚本"
+            exit 1
+          fi
+
+      - uses: actions/upload-artifact@v4
+        if: steps.target.outputs.ok == 'true'
+        with:
+          name: 文档站
+          path: 语言仓/dist/文档站
+          retention-days: 14
+          if-no-files-found: error
+
+      - name: 上传 Cloudflare Pages（没有令牌时演练）
+        id: deploy
+        if: steps.target.outputs.ok == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          YY_COMMIT: ${{ steps.pin.outputs.commit }}
+        run: |
+          set -euo pipefail
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo "::notice::演练：没有机密 CLOUDFLARE_API_TOKEN，不上传。站点已存为构件「文档站」。"
+            echo "uploaded=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then unset CLOUDFLARE_ACCOUNT_ID; fi
+          npx --yes wrangler@4.129.0 pages deploy 语言仓/dist/文档站 --project-name yuyan-docs --branch main \
+            --commit-hash "$YY_COMMIT" --commit-message "语言仓 ${YY_COMMIT:0:9}" --commit-dirty=true
+          echo "uploaded=true" >> "$GITHUB_OUTPUT"
+
+      - name: 记下已发布的语言仓提交
+        if: steps.deploy.outputs.uploaded == 'true'
+        run: mkdir -p 文档站记号 && echo "${{ steps.pin.outputs.commit }}" > 文档站记号/提交
+
+      - uses: actions/cache/save@v4
+        if: steps.deploy.outputs.uploaded == 'true'
+        with:
+          path: 文档站记号
+          key: 文档站已发-${{ steps.pin.outputs.commit }}

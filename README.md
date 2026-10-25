@@ -69,6 +69,8 @@
 
 官网下载中心的编译器包与桌面包同样由本仓库的 CI 编（工作流「下载产品」，语言仓的仓库目标「下载产品」），挂到连续发行 [downloads-continuous](https://github.com/yuyan-lang/yuyan-community-packages/releases/tag/downloads-continuous)：`yuyan-compiler-<系统>-<架构>.tar.gz`（系统 `yuyan-os`、`macos`、`linux`、`windows`）、`yuyan-desktop-<系统>-<架构>.tar.gz`（`macos`、`linux`、`windows`），架构 `x86_64`、`aarch64`，另有 `SHA256SUMS`。yuyan-lang.org 的下载中心只链这两个发行里的文件。
 
+文档站 [docs.yuyan-lang.org](https://docs.yuyan-lang.org/) 也由本仓库的 CI 发布（工作流「文档站」）：它是官网 yuyan-lang.org 的无脚本静态版，两站同一批页面。工具链钉换了语言仓提交时，按钉的提交跑语言仓的仓库目标「文档站」（官网源码在语言仓 `应用/书院/门庭/`），在网页沙盘里给每页跑真实的页面应用、删去全部脚本，再上传到 Cloudflare Pages 项目 `yuyan-docs`。上传用机密 `CLOUDFLARE_API_TOKEN`（只授 Pages 编辑权限）与 `CLOUDFLARE_ACCOUNT_ID`；没有令牌时只演练，站点存为构件「文档站」。
+
 ## 许可
 
 - 社区包只收这些许可（包描述「许可」字段写 SPDX 标识，可用 `AND`、`OR` 组合）：`Apache-2.0`、`MIT`、`BSD-2-Clause`、`BSD-3-Clause`、`ISC`、`Zlib`、`0BSD`、`AGPL-3.0-only`、`AGPL-3.0-or-later`。GPL 等其他传染性许可不收。包目录里请放许可证全文。
