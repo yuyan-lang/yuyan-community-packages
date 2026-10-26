@@ -2,8 +2,9 @@
 # 检出的是 main（可信），按 main 的工具链钉构建社区包工具，用 GitHub 接口取拉取请求、改动文件、检查那轮与作业，
 # 向 yuyan-lang.org 查作者的 GitHub 账号关联的所有者，交 社区包工具 合入核对 决定：
 # 可以合入（退出码 0）就用 GITHUB_TOKEN 合入并触发构建发布（GITHUB_TOKEN 合入产生的推送不会触发工作流，所以显式触发）；
-# 拉取请求改了工具链钉（语言仓 CI 的复制）时，再显式触发按钉出东西的文档站、下载产品、系统光盘：它们本靠推送改钉与构建发布跑完
-# （workflow_run）触发，可 GITHUB_TOKEN 合入的推送、以及它显式触发的构建发布跑完，都不会再触发这两种事件，10-25 起它们就没再自动跑过。
+# 同时显式触发文档站（docs 站有全部包的包页，哪个包改了都要重出）；拉取请求改了工具链钉（语言仓 CI 的复制）时，再显式触发按钉出东西的
+# 下载产品、系统光盘。它们本靠推送与构建发布跑完（workflow_run）触发，可 GITHUB_TOKEN 合入的推送、以及它显式触发的构建发布跑完，
+# 都不会再触发这两种事件，10-25 起它们就没再自动跑过。
 # 不能合入（退出码 10）就在拉取请求里评论原因。
 name: 自动合入
 
@@ -87,8 +88,9 @@ jobs:
           set -euo pipefail
           gh pr merge "$YY_NUMBER" -R "$GITHUB_REPOSITORY" --merge --match-head-commit "$YY_HEAD_SHA"
           gh workflow run 构建发布.yml -R "$GITHUB_REPOSITORY" --ref main
+          gh workflow run 文档站.yml -R "$GITHUB_REPOSITORY" --ref main
           if jq -e 'any(.[][]; .filename == "工具链钉。数据。豫")' 机器人/files.json > /dev/null; then
-            for w in 文档站.yml 下载产品.yml 系统光盘.yml; do
+            for w in 下载产品.yml 系统光盘.yml; do
               gh workflow run "$w" -R "$GITHUB_REPOSITORY" --ref main
             done
           fi

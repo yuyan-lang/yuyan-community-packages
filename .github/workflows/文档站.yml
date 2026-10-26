@@ -1,9 +1,11 @@
-# 文档站：工具链钉换了语言仓提交时，在 GitHub 托管运行机上出 docs.yuyan-lang.org（官网 yuyan-lang.org 的无脚本静态版，两站同一批页面），
+# 文档站：在 GitHub 托管运行机上出 docs.yuyan-lang.org（官网 yuyan-lang.org 的无脚本静态版，两站同一批页面，另有全部社区包的包页），
 # 上传到 Cloudflare Pages 项目 yuyan-docs。官网的源码在语言仓 应用/书院/门庭/（门庭即官网），全部公开，这里只用公开源码构建。
-# 触发与跳过同「下载产品」：合入机器人合入改了工具链钉的拉取请求后显式触发，以及构建发布跑完、维护者推送改了工具链钉或本文件、手动触发；钉的语言仓提交已经发布过就跳过（手动触发照发），
-# 钉的提交还没有仓库目标「文档站」也跳过。做法：准备工具链，用包里的豫构跑语言仓的仓库目标「文档站」（写出 语言仓/dist/文档站），
-# 再 wrangler pages deploy。机密：CLOUDFLARE_API_TOKEN（只授 yuyan-docs 所在账户的 Cloudflare Pages 编辑权限），
-# CLOUDFLARE_ACCOUNT_ID（令牌只能看到一个账户时可省）；没有令牌时只演练：照样出站，存为构件「文档站」，不上传。
+# 触发：合入机器人每合入一个拉取请求就显式触发（包改了、钉换了，docs 站都要跟着变），以及构建发布跑完、维护者推送改了包、工具链钉或本文件、手动触发。
+# 跳过：钉的语言仓提交与本仓库提交这一对已经发布过就跳过（手动触发照发）；钉的提交还没有仓库目标「文档站」也跳过。
+# 做法：准备工具链，把本仓库的 包/ 拷成语言仓的 dist/社区包/（提交号写进 dist/社区包.提交，「网站资料生成」据此出 /包/ 下的包页），
+# 用包里的豫构跑语言仓的仓库目标「文档站」（写出 语言仓/dist/文档站），再 wrangler pages deploy。编译缓存放在工作区的 文档站缓存/，跨轮保留。
+# 机密：CLOUDFLARE_API_TOKEN（只授 yuyan-docs 所在账户的 Cloudflare Pages 编辑权限）与 CLOUDFLARE_ACCOUNT_ID（账户令牌认不出账户，要它）；
+# 没有令牌时只演练：照样出站，存为构件「文档站」，不上传。
 name: 文档站
 
 on:
@@ -12,7 +14,7 @@ on:
     types: [completed]
   push:
     branches: [main]
-    paths: ['工具链钉。数据。豫', '.github/workflows/文档站.yml']
+    paths: ['包/**', '工具链钉。数据。豫', '.github/workflows/文档站.yml']
   workflow_dispatch:
 
 permissions:
@@ -39,17 +41,18 @@ jobs:
           set -euo pipefail
           commit="$(sed -n 's/^「语言仓提交」者『\(.*\)』也。$/\1/p' 工具链钉。数据。豫)"
           test -n "$commit"
-          echo "工具链钉的语言仓提交：$commit"
+          echo "工具链钉的语言仓提交：$commit；本仓库提交：$(git rev-parse HEAD)"
           echo "commit=$commit" >> "$GITHUB_OUTPUT"
+          echo "community=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
-      # 发布成功后存一条以语言仓提交为键的空缓存作记号；记号在就是这个提交已经发布过。
-      - name: 查这个语言仓提交发布过没有
+      # 发布成功后存一条以（语言仓提交，本仓库提交）为键的空缓存作记号；记号在就是这一对已经发布过。
+      - name: 查这一对提交发布过没有
         id: done
         if: github.event_name != 'workflow_dispatch'
         uses: actions/cache/restore@v4
         with:
           path: 文档站记号
-          key: 文档站已发-${{ steps.pin.outputs.commit }}
+          key: 文档站已发-${{ steps.pin.outputs.commit }}-${{ steps.pin.outputs.community }}
           lookup-only: true
 
       - name: 准备工具链
@@ -68,18 +71,41 @@ jobs:
             echo "ok=false" >> "$GITHUB_OUTPUT"
           fi
 
+      # 编译缓存跨轮保留：同一个语言仓提交的各轮共用，换了提交先取最近一份再补编。
+      - name: 恢复编译缓存
+        if: steps.target.outputs.ok == 'true'
+        uses: actions/cache@v4
+        with:
+          path: 文档站缓存
+          key: 文档站缓存-${{ steps.pin.outputs.commit }}-${{ steps.pin.outputs.community }}
+          restore-keys: |
+            文档站缓存-${{ steps.pin.outputs.commit }}-
+            文档站缓存-
+
       # 静态渲染程序（网页沙盘里跑真实的页面应用）编成网页汇编，在诺驿上运行，与语言仓 CI 用同一版诺驿。
       - uses: actions/setup-node@v4
         if: steps.target.outputs.ok == 'true'
         with:
           node-version: 26
 
+      - name: 把本仓库的包交给语言仓（docs 站的包页读它）
+        if: steps.target.outputs.ok == 'true'
+        env:
+          YY_COMMUNITY: ${{ steps.pin.outputs.community }}
+        run: |
+          set -euo pipefail
+          rm -rf 语言仓/dist/社区包
+          mkdir -p 语言仓/dist
+          cp -R 包 语言仓/dist/社区包
+          echo "$YY_COMMUNITY" > 语言仓/dist/社区包.提交
+          echo "包数：$(find 语言仓/dist/社区包 -name '*。包。豫' | wc -l)"
+
       - name: 出 docs 站（仓库目标「文档站」）
         if: steps.target.outputs.ok == 'true'
         working-directory: 语言仓
         run: |
           set -euo pipefail
-          ./豫构稳定。林纳。豫行 目标 文档站 -j "$(nproc)"
+          env 豫言缓存目录="$GITHUB_WORKSPACE/文档站缓存" ./豫构稳定。林纳。豫行 目标 文档站 -j "$(nproc)"
           test -s dist/文档站/index.html
           echo "文件数：$(find dist/文档站 -type f | wc -l)"
           bad="$(grep -rlI --include='*.html' '<script' dist/文档站 || true)"
@@ -104,6 +130,7 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           YY_COMMIT: ${{ steps.pin.outputs.commit }}
+          YY_COMMUNITY: ${{ steps.pin.outputs.community }}
         run: |
           set -euo pipefail
           if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
@@ -113,15 +140,15 @@ jobs:
           fi
           if [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then unset CLOUDFLARE_ACCOUNT_ID; fi
           npx --yes wrangler@4.129.0 pages deploy 语言仓/dist/文档站 --project-name yuyan-docs --branch main \
-            --commit-hash "$YY_COMMIT" --commit-message "语言仓 ${YY_COMMIT:0:9}" --commit-dirty=true
+            --commit-hash "$YY_COMMUNITY" --commit-message "语言仓 ${YY_COMMIT:0:9}，社区包 ${YY_COMMUNITY:0:9}" --commit-dirty=true
           echo "uploaded=true" >> "$GITHUB_OUTPUT"
 
-      - name: 记下已发布的语言仓提交
+      - name: 记下已发布的提交
         if: steps.deploy.outputs.uploaded == 'true'
-        run: mkdir -p 文档站记号 && echo "${{ steps.pin.outputs.commit }}" > 文档站记号/提交
+        run: mkdir -p 文档站记号 && echo "${{ steps.pin.outputs.commit }} ${{ steps.pin.outputs.community }}" > 文档站记号/提交
 
       - uses: actions/cache/save@v4
         if: steps.deploy.outputs.uploaded == 'true'
         with:
           path: 文档站记号
-          key: 文档站已发-${{ steps.pin.outputs.commit }}
+          key: 文档站已发-${{ steps.pin.outputs.commit }}-${{ steps.pin.outputs.community }}
