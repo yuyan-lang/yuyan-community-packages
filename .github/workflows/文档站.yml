@@ -1,8 +1,11 @@
 # 文档站：在 GitHub 托管运行机上出 docs.yuyan-lang.org（官网 yuyan-lang.org 的无脚本静态版，两站同一批页面，另有全部社区包的包页），
 # 上传到 Cloudflare Pages 项目 yuyan-docs。官网的源码在语言仓 应用/书院/门庭/（门庭即官网），全部公开，这里只用公开源码构建。
-# 触发：合入机器人每合入一个拉取请求就显式触发（包改了、钉换了，docs 站都要跟着变），以及构建发布跑完、维护者推送改了包、工具链钉或本文件、手动触发。
-# 跳过：钉的语言仓提交与本仓库提交这一对已经发布过就跳过（手动触发照发）；钉的提交还没有仓库目标「文档站」也跳过。
-# 做法：准备工具链，用包里的豫构跑语言仓的仓库目标「文档站」（写出 语言仓/dist/文档站），再 wrangler pages deploy。环境变量 豫言社区包目录
+# 触发：合入机器人每合入一个拉取请求就显式触发（包改了、钉换了，docs 站都要跟着变），复制机器人推来新的 语言仓/<提交> 分支（语言仓 CI
+# 又过了一轮、出了新工具链），以及构建发布跑完、维护者推送改了包、工具链钉或本文件、手动触发。
+# 工具链与源码：docs 站不等复制拉取请求合入。工具链取 main 与各 语言仓/<提交> 分支的工具链钉里最新的一份（按工具链包文件名里的提交时间比），
+# 源码取语言仓 yybs 的最新提交，包页用 main 的 包/（已发布的包）。复制拉取请求卡在某个包的测试上时，docs 站照样跟上语言仓。
+# 跳过：（工具链的语言仓提交，源码的语言仓提交，本仓库提交）这一组已经发布过就跳过（手动触发照发）。
+# 做法：解开工具链包，用包里的豫构跑语言仓的仓库目标「文档站」（写出 语言仓/dist/文档站），再 wrangler pages deploy。环境变量 豫言社区包目录
 # 指向本仓库的 包/、豫言社区包提交 给本仓库提交号，语言仓「网站资料生成」据此出 /包/ 下的包页。包不能拷进语言仓目录树：语言仓找包时连 dist/
 # 底下也扫，同名包会报包名冲突。编译缓存放在工作区的 文档站缓存/，跨轮保留。
 # 机密：CLOUDFLARE_API_TOKEN（只授 yuyan-docs 所在账户的 Cloudflare Pages 编辑权限）与 CLOUDFLARE_ACCOUNT_ID（账户令牌认不出账户，要它）；
@@ -14,7 +17,7 @@ on:
     workflows: [构建发布]
     types: [completed]
   push:
-    branches: [main]
+    branches: [main, '语言仓/**']
     paths: ['包/**', '工具链钉。数据。豫', '.github/workflows/文档站.yml']
   workflow_dispatch:
 
@@ -36,45 +39,73 @@ jobs:
           ref: main
           persist-credentials: false
 
-      - name: 读工具链钉
+      # 复制拉取请求合入之前，新工具链只写在它的 语言仓/<提交> 分支的钉里；取 main 与这些分支里最新的一份。
+      - name: 选工具链与源码
         id: pin
         run: |
           set -euo pipefail
-          commit="$(sed -n 's/^「语言仓提交」者『\(.*\)』也。$/\1/p' 工具链钉。数据。豫)"
-          test -n "$commit"
-          echo "工具链钉的语言仓提交：$commit；本仓库提交：$(git rev-parse HEAD)"
-          echo "commit=$commit" >> "$GITHUB_OUTPUT"
-          echo "community=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          git fetch --quiet --no-tags --depth=1 origin '+refs/heads/语言仓/*:refs/remotes/origin/语言仓/*'
+          pin_field() { printf '%s\n' "$1" | sed -n "s/^「$2」者『\(.*\)』也。$/\1/p"; }
+          best=""; best_pin=""; best_ref=""
+          for ref in main $(git for-each-ref --format='%(refname:short)' refs/remotes/origin/语言仓/); do
+            if [ "$ref" = main ]; then pin="$(cat 工具链钉。数据。豫)"; else pin="$(git show "$ref:工具链钉。数据。豫" 2>/dev/null || true)"; fi
+            url="$(pin_field "$pin" 原生工具链网址)"
+            ts="$(basename "$url" | grep -oE '^[0-9]{8}T[0-9]{6}Z' || true)"
+            if [ -n "$ts" ] && [[ "$ts" > "$best" ]]; then best="$ts"; best_pin="$pin"; best_ref="$ref"; fi
+          done
+          url="$(pin_field "$best_pin" 原生工具链网址)"
+          sha="$(pin_field "$best_pin" 原生工具链沙二五六)"
+          tool="$(pin_field "$best_pin" 语言仓提交)"
+          commit="$(git ls-remote https://github.com/yuyan-lang/yuyan refs/heads/yybs | cut -f1)"
+          if [ -z "$url" ] || [ -z "$sha" ] || [ -z "$tool" ] || [ -z "$commit" ]; then
+            echo "::error::没选出工具链钉（原生工具链网址、原生工具链沙二五六、语言仓提交），或取不到语言仓 yybs 的提交"
+            exit 1
+          fi
+          echo "工具链：$best_ref 的钉（语言仓 $tool，$best）；源码：语言仓 yybs $commit；本仓库提交：$(git rev-parse HEAD)"
+          {
+            echo "url=$url"
+            echo "sha=$sha"
+            echo "tool=$tool"
+            echo "commit=$commit"
+            echo "community=$(git rev-parse HEAD)"
+          } >> "$GITHUB_OUTPUT"
 
-      # 发布成功后存一条以（语言仓提交，本仓库提交）为键的空缓存作记号；记号在就是这一对已经发布过。
-      - name: 查这一对提交发布过没有
+      # 发布成功后存一条以（工具链提交，源码提交，本仓库提交）为键的空缓存作记号；记号在就是这一组已经发布过。
+      - name: 查这一组提交发布过没有
         id: done
         if: github.event_name != 'workflow_dispatch'
         uses: actions/cache/restore@v4
         with:
           path: 文档站记号
-          key: 文档站已发-${{ steps.pin.outputs.commit }}-${{ steps.pin.outputs.community }}
+          key: 文档站已发-${{ steps.pin.outputs.tool }}-${{ steps.pin.outputs.commit }}-${{ steps.pin.outputs.community }}
           lookup-only: true
 
-      - name: 准备工具链
+      - name: 检出语言仓（yybs 最新提交）
         if: steps.done.outputs.cache-hit != 'true'
-        uses: ./.github/actions/准备工具链
+        uses: actions/checkout@v4
+        with:
+          repository: yuyan-lang/yuyan
+          ref: ${{ steps.pin.outputs.commit }}
+          path: 语言仓
+          fetch-depth: 1
+          persist-credentials: false
 
-      # 工具链钉还指着没有仓库目标「文档站」的旧语言仓提交（2026-10-25 以前）时跳过。
-      - name: 查语言仓有没有「文档站」目标
-        id: target
+      - name: 下载并核对原生工具链包
         if: steps.done.outputs.cache-hit != 'true'
+        env:
+          YY_PIN_URL: ${{ steps.pin.outputs.url }}
+          YY_PIN_SHA256: ${{ steps.pin.outputs.sha }}
         run: |
-          if grep -q "于『文档站』" 语言仓/应用/豫构/仓库目标。豫; then
-            echo "ok=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "::notice::工具链钉的语言仓提交还没有仓库目标「文档站」，跳过"
-            echo "ok=false" >> "$GITHUB_OUTPUT"
-          fi
+          set -euo pipefail
+          archive="$RUNNER_TEMP/yuyan-native.tar.gz"
+          curl --fail --location --retry 3 --retry-all-errors --retry-delay 2 --output "$archive" "$YY_PIN_URL"
+          echo "$YY_PIN_SHA256  $archive" | sha256sum --check -
+          tar -xzf "$archive" -C 语言仓
+          test -x 语言仓/豫构稳定。林纳。豫行
 
-      # 编译缓存跨轮保留：同一个语言仓提交的各轮共用，换了提交先取最近一份再补编。
+      # 编译缓存跨轮保留：同一个源码提交的各轮共用，换了提交先取最近一份再补编。
       - name: 恢复编译缓存
-        if: steps.target.outputs.ok == 'true'
+        if: steps.done.outputs.cache-hit != 'true'
         uses: actions/cache@v4
         with:
           path: 文档站缓存
@@ -85,12 +116,12 @@ jobs:
 
       # 静态渲染程序（网页沙盘里跑真实的页面应用）编成网页汇编，在诺驿上运行，与语言仓 CI 用同一版诺驿。
       - uses: actions/setup-node@v4
-        if: steps.target.outputs.ok == 'true'
+        if: steps.done.outputs.cache-hit != 'true'
         with:
           node-version: 26
 
       - name: 出 docs 站（仓库目标「文档站」）
-        if: steps.target.outputs.ok == 'true'
+        if: steps.done.outputs.cache-hit != 'true'
         working-directory: 语言仓
         env:
           YY_COMMUNITY: ${{ steps.pin.outputs.community }}
@@ -109,7 +140,7 @@ jobs:
           fi
 
       - uses: actions/upload-artifact@v4
-        if: steps.target.outputs.ok == 'true'
+        if: steps.done.outputs.cache-hit != 'true'
         with:
           name: 文档站
           path: 语言仓/dist/文档站
@@ -118,10 +149,11 @@ jobs:
 
       - name: 上传 Cloudflare Pages（没有令牌时演练）
         id: deploy
-        if: steps.target.outputs.ok == 'true'
+        if: steps.done.outputs.cache-hit != 'true'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          YY_TOOL: ${{ steps.pin.outputs.tool }}
           YY_COMMIT: ${{ steps.pin.outputs.commit }}
           YY_COMMUNITY: ${{ steps.pin.outputs.community }}
         run: |
@@ -133,15 +165,16 @@ jobs:
           fi
           if [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then unset CLOUDFLARE_ACCOUNT_ID; fi
           npx --yes wrangler@4.129.0 pages deploy 语言仓/dist/文档站 --project-name yuyan-docs --branch main \
-            --commit-hash "$YY_COMMUNITY" --commit-message "语言仓 ${YY_COMMIT:0:9}，社区包 ${YY_COMMUNITY:0:9}" --commit-dirty=true
+            --commit-hash "$YY_COMMUNITY" --commit-dirty=true \
+            --commit-message "语言仓 ${YY_COMMIT:0:9}（工具链 ${YY_TOOL:0:9}），社区包 ${YY_COMMUNITY:0:9}"
           echo "uploaded=true" >> "$GITHUB_OUTPUT"
 
       - name: 记下已发布的提交
         if: steps.deploy.outputs.uploaded == 'true'
-        run: mkdir -p 文档站记号 && echo "${{ steps.pin.outputs.commit }} ${{ steps.pin.outputs.community }}" > 文档站记号/提交
+        run: mkdir -p 文档站记号 && echo "${{ steps.pin.outputs.tool }} ${{ steps.pin.outputs.commit }} ${{ steps.pin.outputs.community }}" > 文档站记号/提交
 
       - uses: actions/cache/save@v4
         if: steps.deploy.outputs.uploaded == 'true'
         with:
           path: 文档站记号
-          key: 文档站已发-${{ steps.pin.outputs.commit }}-${{ steps.pin.outputs.community }}
+          key: 文档站已发-${{ steps.pin.outputs.tool }}-${{ steps.pin.outputs.commit }}-${{ steps.pin.outputs.community }}
