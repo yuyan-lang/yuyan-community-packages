@@ -69,7 +69,7 @@
 
 官网下载中心的编译器包与桌面包同样由本仓库的 CI 编（工作流「下载产品」，语言仓的仓库目标「下载产品」），挂到连续发行 [downloads-continuous](https://github.com/yuyan-lang/yuyan-community-packages/releases/tag/downloads-continuous)：`yuyan-compiler-<系统>-<架构>.tar.gz`（系统 `yuyan-os`、`macos`、`linux`、`windows`）、`yuyan-desktop-<系统>-<架构>.tar.gz`（`macos`、`linux`、`windows`），架构 `x86_64`、`aarch64`，另有 `SHA256SUMS`。yuyan-lang.org 的下载中心只链这两个发行里的文件。
 
-文档站 [docs.yuyan-lang.org](https://docs.yuyan-lang.org/) 也由本仓库的 CI 发布（工作流「文档站」）：它是官网 yuyan-lang.org 的无脚本静态版，两站同一批页面，另有本仓库全部包的包页（`/包/`、`/包/<所有者>/`、`/包/<所有者>/<包名>/`，文言版在 `/文言/包/…`）。合入机器人每合入一个拉取请求、或复制机器人推来新的 `语言仓/<提交>` 分支时，用 main 与这些分支的工具链钉里最新的一份工具链，在同一个语言仓提交上跑仓库目标「文档站」（不等复制拉取请求合入；仓库目标编在豫构里，源码与工具链须是同一提交，手动触发可用输入 `source` 另指一个仓库目标相同的提交；另指过较新的源码之后，自动触发沿用上回那一组，docs 站只进不退）（官网源码在语言仓 `应用/书院/门庭/`；经环境变量 `豫言社区包目录` 把本仓库的 `包/` 交给它出包页），在网页沙盘里给每页跑真实的页面应用、删去全部脚本，再上传到 Cloudflare Pages 项目 `yuyan-docs`。上传用机密 `CLOUDFLARE_API_TOKEN`（只授 Pages 编辑权限）与 `CLOUDFLARE_ACCOUNT_ID`；没有令牌时只演练，站点存为构件「文档站」。
+文档站 [docs.yuyan-lang.org](https://docs.yuyan-lang.org/) 也由本仓库的 CI 发布（工作流「文档站」）：它是官网 yuyan-lang.org 的静态版，两站同一批页面，另有本仓库全部包的包页（`/包/`、`/包/<所有者>/`、`/包/<所有者>/<包名>/`，文言版在 `/文言/包/…`）。合入机器人每合入一个拉取请求、或复制机器人推来新的 `语言仓/<提交>` 分支时，用 main 与这些分支的工具链钉里最新的一份工具链，在同一个语言仓提交上跑仓库目标「文档站」（不等复制拉取请求合入；仓库目标编在豫构里，源码与工具链须是同一提交，手动触发可用输入 `source` 另指一个仓库目标相同的提交；另指过较新的源码之后，自动触发沿用上回那一组，docs 站只进不退）（官网源码在语言仓 `应用/书院/门庭/`；经环境变量 `豫言社区包目录` 把本仓库的 `包/` 交给它出包页），在网页沙盘里给每页跑真实的页面应用、删去全部脚本（包列表页另挂一段原生 JS 做搜索与种类筛选，这是 docs 站唯一的脚本），再上传到 Cloudflare Pages 项目 `yuyan-docs`。上传用机密 `CLOUDFLARE_API_TOKEN`（只授 Pages 编辑权限）与 `CLOUDFLARE_ACCOUNT_ID`；没有令牌时只演练，站点存为构件「文档站」。
 
 ## 许可
 
