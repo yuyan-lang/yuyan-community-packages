@@ -5,6 +5,7 @@
 # 工具链与源码：docs 站不等复制拉取请求合入。工具链取 main 与各 语言仓/<提交> 分支的工具链钉里最新的一份（按工具链包文件名里的提交时间比），
 # 源码取同一个语言仓提交：仓库目标编在豫构里，源码与跑目标的豫构须是同一提交，「文档站」各步才与源码对得上。包页用 main 的 包/（已发布的包）。
 # 复制拉取请求卡在某个包的测试上时，docs 站照样跟上语言仓 CI 最近通过的提交。手动触发可用输入 source 另指源码提交（须与工具链的仓库目标一致）。
+# 只进不退：上回发布的源码比最新工具链的提交还新（手动另指过），自动触发就沿用上回那一组工具链与源码，直到有不比它旧的工具链。
 # 跳过：（工具链的语言仓提交，源码的语言仓提交，本仓库提交）这一组已经发布过就跳过（手动触发照发）。
 # 做法：解开工具链包，用包里的豫构跑语言仓的仓库目标「文档站」（写出 语言仓/dist/文档站），再 wrangler pages deploy。环境变量 豫言社区包目录
 # 指向本仓库的 包/、豫言社区包提交 给本仓库提交号，语言仓「网站资料生成」据此出 /包/ 下的包页。包不能拷进语言仓目录树：语言仓找包时连 dist/
@@ -45,31 +46,59 @@ jobs:
           ref: main
           persist-credentials: false
 
+      # 最近一次发布的记号，只为知道上回发布的工具链与源码（见下一步）；这个键从不命中，取的是前缀相同里最新的一份。
+      - name: 取上回发布的记号
+        uses: actions/cache/restore@v4
+        with:
+          path: 文档站记号
+          key: 文档站已发-上回-${{ github.run_id }}
+          restore-keys: 文档站已发-
+
       # 复制拉取请求合入之前，新工具链只写在它的 语言仓/<提交> 分支的钉里；取 main 与这些分支里最新的一份。
       - name: 选工具链与源码
         id: pin
         env:
           YY_SOURCE: ${{ inputs.source }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           git fetch --quiet --no-tags --depth=1 origin '+refs/heads/语言仓/*:refs/remotes/origin/语言仓/*'
           pin_field() { printf '%s\n' "$1" | sed -n "s/^「$2」者『\(.*\)』也。$/\1/p"; }
+          # 记号里依次是工具链提交、源码提交、本仓库提交、工具链网址、沙二五六；只有两项的旧记号不算。
+          last_tool=""; last_source=""; last_url=""; last_sha=""
+          if [ -s 文档站记号/提交 ]; then
+            read -r f1 f2 f3 f4 f5 < 文档站记号/提交 || true
+            if [ -n "${f3:-}" ]; then last_tool="$f1"; last_source="$f2"; last_url="${f4:-}"; last_sha="${f5:-}"; fi
+          fi
           best=""; best_pin=""; best_ref=""
           for ref in main $(git for-each-ref --format='%(refname:short)' refs/remotes/origin/语言仓/); do
             if [ "$ref" = main ]; then pin="$(cat 工具链钉。数据。豫)"; else pin="$(git show "$ref:工具链钉。数据。豫" 2>/dev/null || true)"; fi
             url="$(pin_field "$pin" 原生工具链网址)"
+            if [ -z "$last_url" ] && [ -n "$last_tool" ] && [ "$(pin_field "$pin" 语言仓提交)" = "$last_tool" ]; then
+              last_url="$url"; last_sha="$(pin_field "$pin" 原生工具链沙二五六)"
+            fi
             ts="$(basename "$url" | grep -oE '^[0-9]{8}T[0-9]{6}Z' || true)"
             if [ -n "$ts" ] && [[ "$ts" > "$best" ]]; then best="$ts"; best_pin="$pin"; best_ref="$ref"; fi
           done
           url="$(pin_field "$best_pin" 原生工具链网址)"
           sha="$(pin_field "$best_pin" 原生工具链沙二五六)"
           tool="$(pin_field "$best_pin" 语言仓提交)"
-          if [ -z "$YY_SOURCE" ]; then
-            commit="$tool"
-          elif printf '%s' "$YY_SOURCE" | grep -qE '^[0-9a-f]{40}$'; then
-            commit="$YY_SOURCE"
+          if [ -n "$YY_SOURCE" ]; then
+            if printf '%s' "$YY_SOURCE" | grep -qE '^[0-9a-f]{40}$'; then
+              commit="$YY_SOURCE"
+            else
+              commit="$(git ls-remote https://github.com/yuyan-lang/yuyan "$YY_SOURCE" | head -n 1 | cut -f1)"
+            fi
           else
-            commit="$(git ls-remote https://github.com/yuyan-lang/yuyan "$YY_SOURCE" | head -n 1 | cut -f1)"
+            commit="$tool"
+            # 只进不退：上回发布的源码比最新工具链的提交还新，就沿用上回那一组工具链与源码。
+            if [ -n "$last_source" ] && [ -n "$last_url" ] && [ -n "$last_sha" ] && [ "$last_source" != "$tool" ]; then
+              rel="$(gh api "repos/yuyan-lang/yuyan/compare/$tool...$last_source" --jq .status 2>/dev/null || true)"
+              if [ "$rel" = ahead ]; then
+                echo "上回发布的源码 $last_source 比最新工具链的提交 $tool 新，沿用上回的工具链（语言仓 $last_tool）与源码"
+                url="$last_url"; sha="$last_sha"; tool="$last_tool"; commit="$last_source"
+              fi
+            fi
           fi
           if [ -z "$url" ] || [ -z "$sha" ] || [ -z "$tool" ] || [ -z "$commit" ]; then
             echo "::error::没选出工具链钉（原生工具链网址、原生工具链沙二五六、语言仓提交），或认不出输入 source「$YY_SOURCE」"
@@ -185,7 +214,9 @@ jobs:
 
       - name: 记下已发布的提交
         if: steps.deploy.outputs.uploaded == 'true'
-        run: mkdir -p 文档站记号 && echo "${{ steps.pin.outputs.tool }} ${{ steps.pin.outputs.commit }} ${{ steps.pin.outputs.community }}" > 文档站记号/提交
+        env:
+          YY_RECORD: ${{ steps.pin.outputs.tool }} ${{ steps.pin.outputs.commit }} ${{ steps.pin.outputs.community }} ${{ steps.pin.outputs.url }} ${{ steps.pin.outputs.sha }}
+        run: mkdir -p 文档站记号 && echo "$YY_RECORD" > 文档站记号/提交
 
       - uses: actions/cache/save@v4
         if: steps.deploy.outputs.uploaded == 'true'
