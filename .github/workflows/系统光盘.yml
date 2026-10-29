@@ -84,8 +84,10 @@ jobs:
 
       - name: 造两架构启动光盘（仓库目标「启动光盘」）
         if: steps.target.outputs.ok == 'true'
+        # 压低四核十六吉运行器上的内存峰值（10-20 那轮在造盘第三十八分钟被停机）：最终链接一次只链一个，两种架构先后造。
+        # 豫言造盘并行数 要语言仓 676c3252a 以后的提交才认，之前的钉照旧一次造两种架构。
         working-directory: 语言仓
-        run: ./豫构。林纳。豫行 目标 启动光盘 -j "$(nproc)"
+        run: env 豫言链接并行数=1 豫言造盘并行数=一 ./豫构。林纳。豫行 目标 启动光盘 -j "$(nproc)"
 
       - name: 命名资产，算 SHA-256
         if: steps.target.outputs.ok == 'true'
